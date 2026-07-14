@@ -28,6 +28,7 @@ def _demo_ready() -> bool:
     from app.db import warehouse_ready
 
     settings = get_settings()
+    settings.ensure_dirs()
     model = settings.reliability_models_dir / "reliability_classifier.joblib"
     return warehouse_ready(settings) and model.exists()
 
@@ -37,9 +38,17 @@ def ensure_demo() -> None:
     if _demo_ready():
         return
     print("==> Snowflake Reliability first boot — seeding offline demo…", flush=True)
+    from app.config import get_settings
+
+    get_settings().ensure_dirs()
     from scripts.build_demo import main as build_demo
 
     build_demo()
+    if not _demo_ready():
+        raise RuntimeError(
+            "Demo seed finished but warehouse/model are still missing. "
+            "Check Cloud logs for build_demo errors."
+        )
 
 
 ensure_demo()

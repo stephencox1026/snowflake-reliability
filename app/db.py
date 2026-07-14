@@ -153,12 +153,16 @@ def init_schema(settings: Settings) -> None:
 
 
 def warehouse_ready(settings: Settings) -> bool:
-    conn = connect(settings)
+    """True when the warehouse has pipeline rows; False if missing/uninitialized."""
     try:
-        row = conn.execute("SELECT COUNT(*) AS n FROM pipelines").fetchone()
-        return bool(row and row["n"] > 0)
-    finally:
-        conn.close()
+        conn = connect(settings)
+        try:
+            row = conn.execute("SELECT COUNT(*) AS n FROM pipelines").fetchone()
+            return bool(row and int(row["n"]) > 0)
+        finally:
+            conn.close()
+    except (sqlite3.Error, OSError, ValueError):
+        return False
 
 
 def fetchall_dicts(conn: sqlite3.Connection, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
