@@ -1,0 +1,19 @@
+{
+  "model_type": "offline_hist_gradient_boosting",
+  "snowflake_equivalent": "SNOWFLAKE.ML.CLASSIFICATION",
+  "feature_cols": [
+    "freshness_delay_avg",
+    "sla_breach_count",
+    "recent_failures",
+    "volume_zscore_max",
+    "schema_drift_count",
+    "credit_usage_7d",
+    "credit_spike_pct"
+  ],
+  "cat_cols": [
+    "owner_team",
+    "domain",
+    "criticality"
+  ],
+  "trained_at": "2026-07-13T22:03:25.960346+00:00"
+}

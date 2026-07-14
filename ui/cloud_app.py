@@ -1,6 +1,6 @@
 """Streamlit Cloud entrypoint.
 
-Seeds the offline demo (warehouse + model + analyst cache) on first boot, then
+Copies a committed offline seed into a writable /tmp data root on Cloud, then
 loads the ops dashboard. Local use: prefer `make ui` after `make demo`.
 
 Streamlit Cloud main file: ui/cloud_app.py
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,60 +23,106 @@ if str(ROOT) not in sys.path:
 os.chdir(ROOT)
 os.environ.setdefault("RELIABILITY_UI_DIRECT", "true")
 
+SEED_DIR = ROOT / "data" / "seed"
+
 
 def _is_streamlit_cloud() -> bool:
-    # Cloud clones into /mount/src/<repo>; local runs never have this path.
     if Path("/mount/src").exists():
         return True
     return os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT", "").lower() == "cloud"
 
 
-def _configure_cloud_writable_paths() -> None:
-    """Repo mount is often not writable — keep SQLite + models under /tmp on Cloud."""
-    if not _is_streamlit_cloud():
-        return
-    data = Path("/tmp/snowflake-reliability")
-    models = data / "models"
-    data.mkdir(parents=True, exist_ok=True)
+def _data_root() -> Path:
+    if _is_streamlit_cloud():
+        return Path("/tmp/snowflake-reliability")
+    return ROOT / "data"
+
+
+def _configure_paths(data_root: Path) -> None:
+    models = data_root / "models"
+    data_root.mkdir(parents=True, exist_ok=True)
     models.mkdir(parents=True, exist_ok=True)
-    os.environ["RELIABILITY_DATABASE_URL"] = f"sqlite:///{data / 'warehouse.db'}"
-    os.environ["RELIABILITY_DATA_DIR"] = str(data)
-    os.environ["RELIABILITY_MODELS_DIR"] = str(models)
-    print(f"==> Streamlit Cloud data root → {data}", flush=True)
+    # Always absolute sqlite URL (four slashes for absolute path).
+    db_path = (data_root / "warehouse.db").resolve()
+    os.environ["RELIABILITY_DATABASE_URL"] = f"sqlite:///{db_path}"
+    os.environ["RELIABILITY_DATA_DIR"] = str(data_root.resolve())
+    os.environ["RELIABILITY_MODELS_DIR"] = str(models.resolve())
+    print(f"==> data root → {data_root}", flush=True)
+    print(f"==> database  → {db_path}", flush=True)
 
 
-_configure_cloud_writable_paths()
+def _seed_files_present() -> bool:
+    return (
+        (SEED_DIR / "warehouse.db").exists()
+        and (SEED_DIR / "models" / "reliability_classifier.joblib").exists()
+    )
+
+
+def _copy_seed(data_root: Path) -> None:
+    """Install committed demo artifacts into the writable data root."""
+    if not _seed_files_present():
+        raise RuntimeError(f"Missing committed seed under {SEED_DIR}")
+
+    models = data_root / "models"
+    models.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(SEED_DIR / "warehouse.db", data_root / "warehouse.db")
+    shutil.copy2(
+        SEED_DIR / "models" / "reliability_classifier.joblib",
+        models / "reliability_classifier.joblib",
+    )
+    meta = SEED_DIR / "models" / "reliability_classifier_meta.json"
+    if meta.exists():
+        shutil.copy2(meta, models / "reliability_classifier_meta.json")
+    cache = SEED_DIR / "analyst_cache.json"
+    if cache.exists():
+        shutil.copy2(cache, data_root / "analyst_cache.json")
+    print(f"==> Copied demo seed → {data_root}", flush=True)
 
 
 def _demo_ready() -> bool:
     from app.config import get_settings
     from app.db import warehouse_ready
 
+    get_settings.cache_clear()
     settings = get_settings()
     settings.ensure_dirs()
-    model = settings.reliability_models_dir / "reliability_classifier.joblib"
-    return warehouse_ready(settings) and model.exists()
+    model = Path(settings.reliability_models_dir) / "reliability_classifier.joblib"
+    ready = warehouse_ready(settings) and model.exists()
+    print(f"==> demo ready={ready} model={model.exists()} db={settings.reliability_database_url}", flush=True)
+    return ready
 
 
 def ensure_demo() -> None:
-    """Seed offline artifacts before any Streamlit UI calls."""
+    """Make offline artifacts available before any Streamlit UI calls."""
+    data_root = _data_root()
+    _configure_paths(data_root)
+
     if _demo_ready():
         return
-    print("==> Snowflake Reliability first boot — seeding offline demo…", flush=True)
-    from app.config import get_settings
 
-    get_settings.cache_clear()
-    settings = get_settings()
-    settings.ensure_dirs()
+    # Prefer copy of committed seed (fast + Cloud-safe). Fall back to full build locally.
+    try:
+        if _seed_files_present():
+            print("==> Installing committed offline seed…", flush=True)
+            _copy_seed(data_root)
+            if _demo_ready():
+                return
+    except Exception as exc:  # noqa: BLE001 — show Cloud logs clearly
+        print(f"==> Seed copy failed: {exc!r}", flush=True)
+
+    if _is_streamlit_cloud():
+        raise RuntimeError(
+            "Cloud demo seed is missing or unreadable. "
+            "Ensure data/seed/warehouse.db and model files are in the repo."
+        )
+
+    print("==> No seed installed — running full build_demo…", flush=True)
     from scripts.build_demo import main as build_demo
 
     build_demo()
-    get_settings.cache_clear()
     if not _demo_ready():
-        raise RuntimeError(
-            "Demo seed finished but warehouse/model are still missing. "
-            "Check Cloud logs for build_demo errors."
-        )
+        raise RuntimeError("build_demo finished but warehouse/model are still missing.")
 
 
 ensure_demo()

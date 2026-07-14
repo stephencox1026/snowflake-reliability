@@ -1,0 +1,320 @@
+{
+  "1": {
+    "question_id": 1,
+    "question": "Which pipelines are high risk right now?",
+    "description": "Pipelines with HIGH risk tier ordered by failure probability.",
+    "sql": "SELECT p.pipeline_name, p.owner_team, s.failure_probability, s.risk_tier\n        FROM pipeline_risk_scores s\n        JOIN pipelines p ON p.pipeline_id = s.pipeline_id\n        WHERE s.risk_tier = 'HIGH'\n        ORDER BY s.failure_probability DESC\n        LIMIT 25",
+    "rows": [
+      {
+        "pipeline_name": "agg_usage_001",
+        "owner_team": "finops",
+        "failure_probability": 0.91,
+        "risk_tier": "HIGH"
+      },
+      {
+        "pipeline_name": "agg_usage_056",
+        "owner_team": "data_platform",
+        "failure_probability": 0.91,
+        "risk_tier": "HIGH"
+      },
+      {
+        "pipeline_name": "agg_usage_021",
+        "owner_team": "finops",
+        "failure_probability": 0.86,
+        "risk_tier": "HIGH"
+      },
+      {
+        "pipeline_name": "agg_usage_030",
+        "owner_team": "data_platform",
+        "failure_probability": 0.86,
+        "risk_tier": "HIGH"
+      },
+      {
+        "pipeline_name": "agg_usage_037",
+        "owner_team": "finops",
+        "failure_probability": 0.86,
+        "risk_tier": "HIGH"
+      }
+    ],
+    "row_count": 5,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "2": {
+    "question_id": 2,
+    "question": "Which teams have the most freshness SLA breaches this month?",
+    "description": "Count of SLA breaches grouped by owning team in the last 30 days.",
+    "sql": "SELECT p.owner_team, SUM(f.sla_breached) AS breach_count\n        FROM freshness_checks f\n        JOIN pipelines p ON p.pipeline_id = f.pipeline_id\n        WHERE f.check_date >= date('now', '-30 days')\n        GROUP BY p.owner_team\n        ORDER BY breach_count DESC",
+    "rows": [
+      {
+        "owner_team": "finops",
+        "breach_count": 42
+      },
+      {
+        "owner_team": "analytics_eng",
+        "breach_count": 23
+      },
+      {
+        "owner_team": "data_platform",
+        "breach_count": 19
+      },
+      {
+        "owner_team": "revops",
+        "breach_count": 0
+      },
+      {
+        "owner_team": "product_analytics",
+        "breach_count": 0
+      }
+    ],
+    "row_count": 5,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "3": {
+    "question_id": 3,
+    "question": "What are the top 10 pipelines by warehouse credit usage?",
+    "description": "Sum of credits over the last 7 days per pipeline.",
+    "sql": "SELECT p.pipeline_name, SUM(c.credits_used) AS credits_7d\n        FROM warehouse_cost_daily c\n        JOIN pipelines p ON p.pipeline_id = c.pipeline_id\n        WHERE c.cost_date >= date('now', '-7 days')\n        GROUP BY p.pipeline_name\n        ORDER BY credits_7d DESC\n        LIMIT 10",
+    "rows": [
+      {
+        "pipeline_name": "dbt_marts_038",
+        "credits_7d": 238.25
+      },
+      {
+        "pipeline_name": "agg_usage_056",
+        "credits_7d": 217.60999999999996
+      },
+      {
+        "pipeline_name": "agg_usage_083",
+        "credits_7d": 216.72
+      },
+      {
+        "pipeline_name": "agg_usage_105",
+        "credits_7d": 183.97
+      },
+      {
+        "pipeline_name": "agg_usage_037",
+        "credits_7d": 171.14000000000001
+      },
+      {
+        "pipeline_name": "dbt_marts_010",
+        "credits_7d": 167.66
+      },
+      {
+        "pipeline_name": "agg_usage_001",
+        "credits_7d": 162.85
+      },
+      {
+        "pipeline_name": "agg_usage_062",
+        "credits_7d": 129.56
+      },
+      {
+        "pipeline_name": "agg_usage_021",
+        "credits_7d": 106.10000000000001
+      },
+      {
+        "pipeline_name": "agg_usage_111",
+        "credits_7d": 98.53
+      }
+    ],
+    "row_count": 10,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "4": {
+    "question_id": 4,
+    "question": "How many pipelines failed in the last 7 days?",
+    "description": "Distinct pipelines with at least one failed run.",
+    "sql": "SELECT COUNT(DISTINCT pipeline_id) AS failed_pipeline_count\n        FROM pipeline_runs\n        WHERE status = 'failed' AND run_date >= date('now', '-7 days')",
+    "rows": [
+      {
+        "failed_pipeline_count": 2
+      }
+    ],
+    "row_count": 1,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "5": {
+    "question_id": 5,
+    "question": "Which critical pipelines have no RCA narrative generated?",
+    "description": "Critical pipelines at HIGH risk without an RCA record.",
+    "sql": "SELECT p.pipeline_name, s.failure_probability\n        FROM pipelines p\n        JOIN pipeline_risk_scores s ON s.pipeline_id = p.pipeline_id\n        LEFT JOIN rca_narratives r ON r.pipeline_id = p.pipeline_id\n        WHERE p.criticality = 'critical' AND s.risk_tier = 'HIGH' AND r.pipeline_id IS NULL",
+    "rows": [
+      {
+        "pipeline_name": "agg_usage_001",
+        "failure_probability": 0.91
+      },
+      {
+        "pipeline_name": "agg_usage_056",
+        "failure_probability": 0.91
+      }
+    ],
+    "row_count": 2,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "6": {
+    "question_id": 6,
+    "question": "What is the average volume anomaly z-score by data domain?",
+    "description": "Mean z-score from volume anomaly checks grouped by domain.",
+    "sql": "SELECT p.domain, ROUND(AVG(v.z_score), 2) AS avg_z_score\n        FROM volume_anomalies v\n        JOIN pipelines p ON p.pipeline_id = v.pipeline_id\n        GROUP BY p.domain\n        ORDER BY avg_z_score DESC",
+    "rows": [
+      {
+        "domain": "product",
+        "avg_z_score": 2.04
+      },
+      {
+        "domain": "marketing",
+        "avg_z_score": 1.62
+      },
+      {
+        "domain": "platform",
+        "avg_z_score": 1.46
+      },
+      {
+        "domain": "finance",
+        "avg_z_score": 1.13
+      }
+    ],
+    "row_count": 4,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "7": {
+    "question_id": 7,
+    "question": "Which pipelines had schema drift events in the last 30 days?",
+    "description": "Pipelines with one or more schema drift events.",
+    "sql": "SELECT p.pipeline_name, COUNT(*) AS drift_events\n        FROM schema_drift_events d\n        JOIN pipelines p ON p.pipeline_id = d.pipeline_id\n        WHERE d.detected_at >= date('now', '-30 days')\n        GROUP BY p.pipeline_name\n        ORDER BY drift_events DESC",
+    "rows": [
+      {
+        "pipeline_name": "agg_usage_083",
+        "drift_events": 1
+      },
+      {
+        "pipeline_name": "agg_usage_021",
+        "drift_events": 1
+      }
+    ],
+    "row_count": 2,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "8": {
+    "question_id": 8,
+    "question": "What is the failure rate by owning team?",
+    "description": "Failed runs divided by total runs per team.",
+    "sql": "SELECT p.owner_team,\n               ROUND(100.0 * SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END) / COUNT(*), 2) AS failure_rate_pct\n        FROM pipeline_runs r\n        JOIN pipelines p ON p.pipeline_id = r.pipeline_id\n        GROUP BY p.owner_team\n        ORDER BY failure_rate_pct DESC",
+    "rows": [
+      {
+        "owner_team": "data_platform",
+        "failure_rate_pct": 2.96
+      },
+      {
+        "owner_team": "finops",
+        "failure_rate_pct": 2.59
+      },
+      {
+        "owner_team": "revops",
+        "failure_rate_pct": 2.22
+      },
+      {
+        "owner_team": "analytics_eng",
+        "failure_rate_pct": 2.22
+      },
+      {
+        "owner_team": "product_analytics",
+        "failure_rate_pct": 1.48
+      }
+    ],
+    "row_count": 5,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "9": {
+    "question_id": 9,
+    "question": "Which pipelines have rising cost spikes week over week?",
+    "description": "Pipelines where second-half 7d credits exceed first half by 25%+.",
+    "sql": "SELECT p.pipeline_name, t.credit_spike_pct\n        FROM training_features t\n        JOIN pipelines p ON p.pipeline_id = t.pipeline_id\n        WHERE t.credit_spike_pct >= 25\n        ORDER BY t.credit_spike_pct DESC\n        LIMIT 20",
+    "rows": [
+      {
+        "pipeline_name": "dbt_marts_038",
+        "credit_spike_pct": 49.3
+      },
+      {
+        "pipeline_name": "agg_usage_030",
+        "credit_spike_pct": 48.4
+      },
+      {
+        "pipeline_name": "agg_usage_111",
+        "credit_spike_pct": 46.7
+      },
+      {
+        "pipeline_name": "dbt_marts_010",
+        "credit_spike_pct": 43.7
+      },
+      {
+        "pipeline_name": "agg_usage_021",
+        "credit_spike_pct": 43.2
+      },
+      {
+        "pipeline_name": "dbt_marts_022",
+        "credit_spike_pct": 43.1
+      },
+      {
+        "pipeline_name": "agg_usage_056",
+        "credit_spike_pct": 42.9
+      },
+      {
+        "pipeline_name": "agg_usage_117",
+        "credit_spike_pct": 41.2
+      },
+      {
+        "pipeline_name": "agg_usage_083",
+        "credit_spike_pct": 41.0
+      },
+      {
+        "pipeline_name": "agg_usage_105",
+        "credit_spike_pct": 39.1
+      },
+      {
+        "pipeline_name": "agg_usage_037",
+        "credit_spike_pct": 37.4
+      },
+      {
+        "pipeline_name": "agg_usage_023",
+        "credit_spike_pct": 33.9
+      },
+      {
+        "pipeline_name": "dbt_marts_002",
+        "credit_spike_pct": 33.0
+      },
+      {
+        "pipeline_name": "agg_usage_001",
+        "credit_spike_pct": 31.6
+      },
+      {
+        "pipeline_name": "agg_usage_082",
+        "credit_spike_pct": 28.5
+      }
+    ],
+    "row_count": 15,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  },
+  "10": {
+    "question_id": 10,
+    "question": "How many pipelines moved from low to high risk in the last 7 days?",
+    "description": "Proxy: MEDIUM/HIGH risk with recent_failures >= 2.",
+    "sql": "SELECT COUNT(*) AS escalated_pipeline_count\n        FROM training_features t\n        JOIN pipeline_risk_scores s ON s.pipeline_id = t.pipeline_id\n        WHERE s.risk_tier IN ('HIGH', 'MEDIUM') AND t.recent_failures >= 2",
+    "rows": [
+      {
+        "escalated_pipeline_count": 1
+      }
+    ],
+    "row_count": 1,
+    "source": "offline_sql_template",
+    "cortex_analyst_note": "In Snowflake, the same question is sent to the Cortex Analyst REST API with semantic_models/pipeline_health.yaml."
+  }
+}
