@@ -1,0 +1,60 @@
+name: pipeline_health
+description: Semantic model for Snowflake data-platform pipeline reliability metrics.
+tables:
+  - name: pipelines
+    description: Registered data pipelines with ownership and criticality.
+    base_table:
+      database: RELIABILITY_DB
+      schema: PUBLIC
+      table: PIPELINES
+    dimensions:
+      - name: pipeline_name
+        expr: PIPELINE_NAME
+        description: Human-readable pipeline identifier.
+      - name: owner_team
+        expr: OWNER_TEAM
+        description: Team responsible for pipeline operations.
+      - name: domain
+        expr: DOMAIN
+        description: Business domain for the pipeline.
+      - name: criticality
+        expr: CRITICALITY
+        description: Business criticality tier.
+  - name: pipeline_risk_scores
+    description: Cortex ML failure risk scores per pipeline.
+    base_table:
+      database: RELIABILITY_DB
+      schema: PUBLIC
+      table: PIPELINE_RISK_SCORES
+    dimensions:
+      - name: risk_tier
+        expr: RISK_TIER
+        description: HIGH, MEDIUM, or LOW risk classification.
+    metrics:
+      - name: failure_probability
+        expr: AVG(FAILURE_PROBABILITY)
+        description: Average predicted failure probability.
+  - name: freshness_checks
+    description: Data freshness SLA monitoring results.
+    base_table:
+      database: RELIABILITY_DB
+      schema: PUBLIC
+      table: FRESHNESS_CHECKS
+    time_dimensions:
+      - name: check_date
+        expr: CHECK_DATE
+        description: Date of freshness check.
+    metrics:
+      - name: sla_breach_count
+        expr: SUM(SLA_BREACHED)
+        description: Count of SLA breaches.
+  - name: warehouse_cost_daily
+    description: Daily Snowflake credit consumption by pipeline.
+    base_table:
+      database: RELIABILITY_DB
+      schema: PUBLIC
+      table: WAREHOUSE_COST_DAILY
+    metrics:
+      - name: credits_used
+        expr: SUM(CREDITS_USED)
+        description: Total warehouse credits consumed.

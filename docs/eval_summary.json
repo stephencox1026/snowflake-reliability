@@ -1,0 +1,15 @@
+{
+  "analyst_questions_ok": 10,
+  "high_risk": 5,
+  "rca_count": 4,
+  "model_metrics": {
+    "run_id": "run_20260713220325",
+    "trained_at": "2026-07-13T22:03:25.961899+00:00",
+    "precision_score": 1.0,
+    "recall_score": 1.0,
+    "f1_score": 1.0,
+    "roc_auc": 1.0,
+    "train_rows": 120,
+    "model_type": "offline_hist_gradient_boosting"
+  }
+}
