@@ -23,6 +23,30 @@ os.chdir(ROOT)
 os.environ.setdefault("RELIABILITY_UI_DIRECT", "true")
 
 
+def _is_streamlit_cloud() -> bool:
+    # Cloud clones into /mount/src/<repo>; local runs never have this path.
+    if Path("/mount/src").exists():
+        return True
+    return os.environ.get("STREAMLIT_RUNTIME_ENVIRONMENT", "").lower() == "cloud"
+
+
+def _configure_cloud_writable_paths() -> None:
+    """Repo mount is often not writable — keep SQLite + models under /tmp on Cloud."""
+    if not _is_streamlit_cloud():
+        return
+    data = Path("/tmp/snowflake-reliability")
+    models = data / "models"
+    data.mkdir(parents=True, exist_ok=True)
+    models.mkdir(parents=True, exist_ok=True)
+    os.environ["RELIABILITY_DATABASE_URL"] = f"sqlite:///{data / 'warehouse.db'}"
+    os.environ["RELIABILITY_DATA_DIR"] = str(data)
+    os.environ["RELIABILITY_MODELS_DIR"] = str(models)
+    print(f"==> Streamlit Cloud data root → {data}", flush=True)
+
+
+_configure_cloud_writable_paths()
+
+
 def _demo_ready() -> bool:
     from app.config import get_settings
     from app.db import warehouse_ready
@@ -40,10 +64,13 @@ def ensure_demo() -> None:
     print("==> Snowflake Reliability first boot — seeding offline demo…", flush=True)
     from app.config import get_settings
 
-    get_settings().ensure_dirs()
+    get_settings.cache_clear()
+    settings = get_settings()
+    settings.ensure_dirs()
     from scripts.build_demo import main as build_demo
 
     build_demo()
+    get_settings.cache_clear()
     if not _demo_ready():
         raise RuntimeError(
             "Demo seed finished but warehouse/model are still missing. "

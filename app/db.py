@@ -132,13 +132,22 @@ CREATE TABLE IF NOT EXISTS remediation_assignments (
 def _sqlite_path(url: str) -> Path:
     if not url.startswith("sqlite:///"):
         raise ValueError("Offline demo supports sqlite only. Set RELIABILITY_DATABASE_URL.")
-    return Path(url.replace("sqlite:///", ""))
+    raw = url.replace("sqlite:///", "", 1)
+    # sqlite:////abs/path → keep leading slash; sqlite:///relative → as given
+    return Path(raw)
 
 
 def connect(settings: Settings) -> sqlite3.Connection:
-    path = _sqlite_path(settings.reliability_database_url)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    path = _sqlite_path(str(settings.reliability_database_url))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path, check_same_thread=False)
+    except (sqlite3.Error, OSError) as exc:
+        # Streamlit Cloud may block writes under /mount/src — fall back to /tmp.
+        fallback = Path("/tmp/snowflake-reliability") / path.name
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        print(f"==> SQLite path {path} not usable ({exc}); using {fallback}", flush=True)
+        conn = sqlite3.connect(fallback, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -161,7 +170,7 @@ def warehouse_ready(settings: Settings) -> bool:
             return bool(row and int(row["n"]) > 0)
         finally:
             conn.close()
-    except (sqlite3.Error, OSError, ValueError):
+    except Exception:
         return False
 
 
